@@ -12,6 +12,8 @@ from skimage.segmentation import *
 from skimage.color import label2rgb
 from skimage.segmentation import mark_boundaries  #TODO Maybe remove this import
 
+from skimage.filters.rank import entropy
+
 from skimage.feature import peak_local_max
 import matplotlib.pyplot as plt
 import numpy as np
@@ -143,11 +145,10 @@ def find_regions(image, mask):
   # plt.show()
 
   props = measure.regionprops_table(labels, properties=(
+    'label',
     "area",
     "perimeter",
     "area_convex",
-
-    'label',
     'area',
     'centroid',
     'eccentricity',
@@ -277,21 +278,28 @@ regardless of it being chipped or not.
 
 
 # Parameters to identify M&M's
-df['is_mm'] = (
-    (df['circularity'] < 0.85) & 
+df['is_chipped'] = (
     (df['aspect_ratio'] > 1.3) & 
     (df['solidity'] < 0.97)
 )
 
 # Parameters to identify chipped chocolates
 median_area = df["area"].median()
+
+
 circ_th = 0.85
 area_th = 3200
 
-df['is_chipped'] = (
-   (df["circularity"] < 0.85) &
-   (df["area"] < 3200)
-)
+df['is_mm'] = (
+  #(df["circularity"] < 0.9)
+
+  #(df["aspect_ratio"] > 1.2) 
+  (df["eccentricity"] > 0.55) &
+  (df["circularity"] < 0.9) &
+  (~df["is_chipped"])
+   )
+  #  
+  #  (df["solidity"] > 0.97)
 
 fix, ax = plt.subplots(1, 2, figsize=(12, 6))
 
@@ -301,7 +309,7 @@ ax[0].axis('off')
 
 ax[1].imshow(img)
 for idx, row in df.iterrows():
-   if row["is_chipped"]:
+   if row["is_mm"]:
        y, x = row['centroid_y'], row['centroid_x']
        ax[1].plot(x, y, 'ro', markersize=12, markeredgecolor='black', markeredgewidth=1.5)
 
