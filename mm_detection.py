@@ -2,8 +2,9 @@
  # @ Author: Kai Ruben Enerhaugen
  # @ Create Time: 2025-10-24
  # @ Modified by: Kai Ruben Enerhaugen
- # @ Modified time: 2025-10-29
+ # @ Modified time: 2025-10-31
  '''
+
 
 
 from skimage import io, filters, transform, util, measure
@@ -21,10 +22,26 @@ from scipy import ndimage as ndi
 
 SCALE_FACTOR = 0.2
 
-
 t_start = time.time()
 
 def load_image(filepath: str, scale_factor: float = SCALE_FACTOR) -> np.ndarray:
+  """Load an image from disk, crop 300 pixels from all four sides, resize by scale_factor, and return as an 8-bit ndarray.
+  Parameters
+  ----------
+  filepath : str
+    Path to the image file.
+  scale_factor : float, optional
+    Multiplicative factor applied to the original image dimensions (default: SCALE_FACTOR).
+  Returns
+  -------
+  np.ndarray
+    Cropped and resized image as an uint8 array with shape (H, W, C).
+  Notes
+  -----
+  - Cropping applied: ((300, 300), (300, 300), (0, 0)).
+  - Resizing uses anti-aliasing and preserves the original value range before casting to uint8.
+  """
+
 
   # Load image
   img = io.imread(filepath)
@@ -56,6 +73,19 @@ compared to luminance-based approaches."
 """
 
 def create_bin_mask(image: np.ndarray, scale_factor: float = SCALE_FACTOR) -> np.ndarray:
+  """
+  Create a binary mask isolating regions based on the blue channel.
+  Args:
+      image (np.ndarray): Input RGB image of shape (H, W, 3).
+      scale_factor (float, optional): Factor for area thresholds when removing small
+          holes or objects. Default is SCALE_FACTOR.
+  Returns:
+      np.ndarray: Boolean mask of shape (H, W)
+  ---
+  Notes:
+      Requires scikit-image (filters, morphology). Input image should have an
+      intensity range compatible with skimage filters (e.g. 0–1 or 0–255).
+  """
 
   # Extract channels
   red_c = image[:, :, 0]
@@ -76,6 +106,18 @@ def create_bin_mask(image: np.ndarray, scale_factor: float = SCALE_FACTOR) -> np
 
 
 def find_regions(image: np.ndarray, binary_mask: np.ndarray) -> pd.DataFrame:
+  """Detect and measure separated regions in a binary mask using distance transform + watershed.
+
+  Args:
+    image : np.ndarray
+      Original image (RGB or grayscale). Not used by default (kept for optional texture/entropy calculations).
+    binary_mask : np.ndarray
+      Binary mask (bool or {0,1}) of foreground regions to be separated; must match image shape.
+
+  Returns:
+      pd.DataFrame: Region properties table
+  """  
+
   #Distance transform
   distance = ndi.distance_transform_edt(binary_mask)
 
@@ -91,22 +133,20 @@ def find_regions(image: np.ndarray, binary_mask: np.ndarray) -> pd.DataFrame:
   # 4. Watershed
   labels = watershed(-distance, markers, mask=binary_mask)
 
-  # 5. Entropy measurement
-  gray = rgb2gray(image)
-  entropy_img = entropy(gray, disk(5))
+  # # 5. Entropy measurement
+  # gray = rgb2gray(image)
+  # entropy_img = entropy(gray, disk(5))
 
   # Extract data
-  props = measure.regionprops_table(labels, intensity_image=entropy_img, properties=(
+  props = measure.regionprops_table(labels, properties=(
     'label',
     'area',
     'perimeter',
-    'intensity_mean',
     'centroid',
     'eccentricity',
     'solidity',
     'major_axis_length',
     'minor_axis_length',
-    'orientation',
   ))
 
   df = pd.DataFrame(props)
@@ -117,11 +157,21 @@ def find_regions(image: np.ndarray, binary_mask: np.ndarray) -> pd.DataFrame:
 
 
 
-def plot_measurements(data:pd.DataFrame):
+def plot_measurements(data:pd.DataFrame) -> None:
+  """
+  Plots a 2x2 grid of histograms showing the distribution of object features.
+  The function creates histograms for circularity, solidity, aspect ratio, and eccentricity
+  measurements, with threshold lines indicating classification boundaries.
+
+  Args:
+    data (pd.DataFrame): DataFrame containing feature measurements.
+
+  Returns:
+    None
+  """
 
   fig, ax = plt.subplots(2, 2, figsize=(10, 10))
   
-
   plots = [
     ('circularity', 'Circularity', 0.9),
     ('solidity', "Solidity", 0.97),
@@ -129,7 +179,6 @@ def plot_measurements(data:pd.DataFrame):
     ('eccentricity', 'Eccentricity', 0.55),
   ]
 
-  
   for axes, (col, title, threshold) in zip(ax.flat, plots):
     axes.hist(data[col], bins=30, edgecolor='black')
     axes.set_xlabel(title)
@@ -138,22 +187,26 @@ def plot_measurements(data:pd.DataFrame):
     axes.axvline(threshold, color='r', linestyle='--', label='Threshold')
     axes.legend()
 
-
   plt.tight_layout()
   plt.show()
 
 
-def identify_mm(img:np.ndarray, data:pd.DataFrame):
+def identify_mm(img:np.ndarray, data:pd.DataFrame) -> None:
+  """
+  Identifies M&M's and chipped chocolates in an image based on specified parameters.
+  Parameters:
+    img (np.ndarray): The input image containing potential M&M's.
+    data (pd.DataFrame): A DataFrame containing features of detected objects, including 
+               aspect ratio, solidity, eccentricity, circularity, and centroids.
+  Returns:
+    None: The function plots the original image and highlights identified M&M's.
+  """
   # Identification parameteres
   ASPECT_RATIO = 1.3
   SOLIDITY = 0.97
   ECCENTRICITY = 0.55
   CIRCULARITY = 0.9
 
-  """
-  We have decided to exclude the chipped chocolate pieces. Some workarounds could be to use texture to identify the m&m's
-  regardless of it being chipped or not.
-  """
   # Detect chipped chocolates
   data['is_chipped'] = (
     (data['aspect_ratio'] > ASPECT_RATIO) & 
@@ -171,7 +224,6 @@ def identify_mm(img:np.ndarray, data:pd.DataFrame):
   ax[0].set_title('Original Image')
   ax[1].set_title('Identified')
   
-
   ax[1].imshow(img)
   for idx, row in data.iterrows():
     if row["is_mm"]:
