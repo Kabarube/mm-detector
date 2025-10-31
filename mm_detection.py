@@ -41,8 +41,6 @@ def load_image(filepath: str, scale_factor: float = SCALE_FACTOR) -> np.ndarray:
   - Cropping applied: ((300, 300), (300, 300), (0, 0)).
   - Resizing uses anti-aliasing and preserves the original value range before casting to uint8.
   """
-
-
   # Load image
   img = io.imread(filepath)
 
@@ -56,21 +54,6 @@ def load_image(filepath: str, scale_factor: float = SCALE_FACTOR) -> np.ndarray:
   # Return 8bit image
   return img_resized.astype(np.uint8)
 
-"""
-We can look at the different channels.
-Taking a closer look at the image we can see that we dont have any blue chocolates.
-The white paper however, will have some blues
-This makes the blue channel a good choice for separating the foreground and background
-
-Alternatively we could have converted the image to HSV or LAB color space
-and experiment further, but in this case the blue channel yielded better results.
-
-
-"Rather than standard grayscale conversion, we selected the blue channel from RGB color space.
-Analysis revealed that the beige paper background has high blue content while the chocolates
-(regardless of their visible color) have lower blue values, providing superior foreground-background separation
-compared to luminance-based approaches."
-"""
 
 def create_bin_mask(image: np.ndarray, scale_factor: float = SCALE_FACTOR) -> np.ndarray:
   """
@@ -86,12 +69,6 @@ def create_bin_mask(image: np.ndarray, scale_factor: float = SCALE_FACTOR) -> np
       Requires scikit-image (filters, morphology). Input image should have an
       intensity range compatible with skimage filters (e.g. 0–1 or 0–255).
   """
-
-  # Extract channels
-  red_c = image[:, :, 0]
-  green_c = image[:, :, 1]
-  #blue_c = image[:, :, 2]
-
   # apply gaussian blur on blue channel to remove small disturbances
   blue_c = filters.gaussian(image[:, :, 2])
 
@@ -133,10 +110,6 @@ def find_regions(image: np.ndarray, binary_mask: np.ndarray) -> pd.DataFrame:
   # 4. Watershed
   labels = watershed(-distance, markers, mask=binary_mask)
 
-  # # 5. Entropy measurement
-  # gray = rgb2gray(image)
-  # entropy_img = entropy(gray, disk(5))
-
   # Extract data
   props = measure.regionprops_table(labels, properties=(
     'label',
@@ -154,7 +127,6 @@ def find_regions(image: np.ndarray, binary_mask: np.ndarray) -> pd.DataFrame:
   df['aspect_ratio'] = df['major_axis_length'] / df['minor_axis_length']
 
   return df
-
 
 
 def plot_measurements(data:pd.DataFrame) -> None:
@@ -232,7 +204,6 @@ def identify_mm(img:np.ndarray, data:pd.DataFrame) -> None:
         
   ax[1].legend()
   plt.show()
-
 
 
 if __name__ == "__main__":
